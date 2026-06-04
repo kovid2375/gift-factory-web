@@ -149,7 +149,7 @@ export const Header = () => {
       <div className="hidden sm:block bg-primary text-white">
         <div className="container mx-auto px-4 flex items-center justify-between py-2 text-xs">
           <span>Free worldwide shipping</span>
-          <span>30-day returns</span>
+          <span>60-day returns</span>
         </div>
       </div>
 
