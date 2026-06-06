@@ -148,7 +148,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         const exp = u.accessToken ? getJwtExp(u.accessToken) : null;
         token.accessTokenExpires = exp ?? (Date.now() + 3600 * 1000); // fallback 1 hour
       }
-      
+
       if (trigger === "update" && session) {
         if (session.user?.name) {
           token.name = session.user.name;

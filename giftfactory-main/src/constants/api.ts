@@ -2,7 +2,7 @@
  * Backend API base path: api/v1 (set in axios baseURL).
  * All paths below are relative to that.
  */
-const BASE = "http://192.168.1.17:3000/api/v1";
+const BASE = process.env.NEXT_PUBLIC_API_BASE_URL;
 
 export const API_ENDPOINTS = {
   auth: {
@@ -143,7 +143,7 @@ function getApiBaseOrigin(): string {
   const url = process.env.NEXT_PUBLIC_API_BASE_URL?.trim();
   if (url) return url.replace(/\/$/, "");
   if (typeof process !== "undefined" && process.env.NODE_ENV === "development")
-    return "https://giftfactory-api.onrender.com";
+    return 'https://dev-api.ezzme.com/api/v1';
   return "";
 }
 
