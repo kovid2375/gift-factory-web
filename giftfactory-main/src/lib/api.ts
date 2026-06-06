@@ -364,10 +364,15 @@ export async function fetchRelatedProducts(productId: string): Promise<ApiRespon
   return { ...data, data: normalizeProducts(data?.data) };
 }
 
-export async function fetchProductReviews(productId: string): Promise<ApiResponse<unknown[]>> {
-  const { data } = await get(API_ENDPOINTS.web.productReviews, {
-    params: { productId, approved: "true" }
-  });
+export async function fetchProductReviews(
+  productId: string,
+  approved?: boolean | string
+): Promise<ApiResponse<unknown[]>> {
+  const params: Record<string, string> = { productId };
+  if (approved !== undefined && approved !== "all") {
+    params.approved = approved === true || approved === "true" ? "true" : "false";
+  }
+  const { data } = await get(API_ENDPOINTS.web.productReviews, { params });
   return data;
 }
 

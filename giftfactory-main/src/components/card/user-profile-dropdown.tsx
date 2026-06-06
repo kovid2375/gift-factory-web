@@ -26,7 +26,7 @@ export const UserProfileDropdown = () => {
     queryFn: () => fetchWishlistIds(customerId as string),
     enabled: session.status === "authenticated" && !!customerId,
   });
-  
+
   const wishlistCount = (wishlistIdsRes?.data ?? []).length;
 
   return (
@@ -55,10 +55,10 @@ export const UserProfileDropdown = () => {
                   Hi {session.data?.user?.name || session.data?.user?.email || "User"}
                 </p>
               </div>
-              
+
               {/* Divider */}
               <div className="border-t border-border my-1" />
-              
+
               {/* Menu Items */}
               <Link
                 href="/profile"

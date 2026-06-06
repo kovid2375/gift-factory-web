@@ -154,7 +154,7 @@ export const Header = () => {
             <Link href="/help" className="hover:text-white/80 transition-colors flex items-center gap-1">
               <HelpCircle className="h-3 w-3" /> Help & Support
             </Link>
-            
+
           </div>
         </div>
       </div>
@@ -196,7 +196,7 @@ export const Header = () => {
             {/* Wishlist */}
             <Link
               href="/wishlist"
-              className="relative flex flex-col items-center justify-center text-gray-700 hover:text-primary transition-colors cursor-pointer"
+              className="relative hidden md:flex flex-col items-center justify-center text-gray-700 hover:text-primary transition-colors cursor-pointer"
               aria-label="Wishlist"
             >
               <div className="relative">
@@ -488,8 +488,8 @@ export const Header = () => {
                     onClick={() => handleSetDefaultAddress(address)}
                     disabled={isSubmitting}
                     className={`w-full rounded-lg border p-3 text-left transition-colors ${isCurrentDefault
-                        ? "border-primary bg-primary/5"
-                        : "border-border hover:border-primary/40 hover:bg-muted/30"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/40 hover:bg-muted/30"
                       } ${isSubmitting ? "opacity-60" : ""}`}
                   >
                     <div className="flex items-start justify-between gap-2">

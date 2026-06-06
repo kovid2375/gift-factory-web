@@ -70,7 +70,7 @@ export const API_ENDPOINTS = {
     cartById: (id: string) => `${BASE}/cart/${id}`,
     cartItem: (cartId: string) => `${BASE}/cart/${cartId}/item`,
     guestCartById: (cartId: string) => `${BASE}/cart/guest/${cartId}`,
-    guestCartItem: (cartId: string) => `${BASE}/cart/guest/${cartId}/item`,
+    guestCartItem: (cartId: string) => `${BASE}/fcart/guest/${cartId}/item`,
     guestItemAlt: (cartId: string) => `${BASE}/guest/${cartId}/item`,
     guestCartAdd: `${BASE}/cart/guest/item`,
     guestCartBulkAdd: `${BASE}/cart/guest/items`,

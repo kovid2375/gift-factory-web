@@ -7,7 +7,7 @@ import { useForm } from "react-hook-form";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserProfile } from "@/types/product";
 import { useEffect, useState } from "react";
-import { updateProfile, changePassword } from "@/lib/api";
+import { updateProfile, changePassword, fetchProfileStats } from "@/lib/api";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "next-auth/react";
@@ -58,8 +58,13 @@ export function ProfileInfo({ user, isLoading }: ProfileInfoProps) {
   const [showCurrentPassword, setShowCurrentPassword] = useState(false);
   const [showNewPassword, setShowNewPassword] = useState(false);
 
-  const stats = (user as any) ?? null;
-  const statsLoading = isLoading;
+  const { data: statsRes, isLoading: statsLoading } = useQuery({
+    queryKey: ["customer", "profile-stats"],
+    queryFn: () => fetchProfileStats(),
+    enabled: !!session?.accessToken,
+  });
+
+  const stats = statsRes?.data ?? null;
 
   type FormValues = {
     name: string;
@@ -232,13 +237,12 @@ export function ProfileInfo({ user, isLoading }: ProfileInfoProps) {
 
       {/* ── Stats strip ── */}
       {!statsLoading && stats && (
-        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide sm:grid sm:grid-cols-3 lg:grid-cols-5">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide sm:grid sm:grid-cols-2 lg:grid-cols-4">
           {[
             { icon: ShoppingBag, label: "Orders", value: stats.orderCount ?? 0, color: "text-blue-600 bg-blue-50", href: "/orders" },
             { icon: Heart, label: "Wishlist", value: stats.wishlistCount ?? 0, color: "text-rose-600 bg-rose-50", href: "/wishlist" },
             { icon: Star, label: "Reviews", value: stats.reviewCount ?? 0, color: "text-amber-600 bg-amber-50" },
             { icon: MapPin, label: "Addresses", value: stats.addressCount ?? 0, color: "text-purple-600 bg-purple-50", href: "/profile/addresses" },
-            { icon: Coins, label: "Points", value: stats.loyaltyPoints ?? 0, color: "text-emerald-600 bg-emerald-50" },
           ].map(({ icon: Icon, label, value, color, href }) => {
             const cardClassName = "rounded-xl border border-border bg-card p-2.5 sm:p-3 flex flex-col items-center gap-1 sm:gap-1.5 text-center min-w-[72px] sm:min-w-0 shrink-0 sm:shrink transition-colors";
             const interactiveClassName = "hover:border-primary/40 hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2";
@@ -275,8 +279,8 @@ export function ProfileInfo({ user, isLoading }: ProfileInfoProps) {
         </div>
       )}
       {statsLoading && (
-        <div className="flex gap-2 sm:grid sm:grid-cols-3 lg:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, i) => (
+        <div className="flex gap-2 sm:grid sm:grid-cols-2 lg:grid-cols-4">
+          {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="rounded-xl border border-border bg-muted/40 h-20 sm:h-24 min-w-[72px] sm:min-w-0 animate-pulse" />
           ))}
         </div>

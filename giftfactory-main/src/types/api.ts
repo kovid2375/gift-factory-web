@@ -184,10 +184,15 @@ export function normalizeProductReviews(
       customerId?: { fullName?: string };
       user?: string;
     };
+    const userStr = typeof r.user === "string"
+      ? r.user.trim()
+      : (r.user && typeof r.user === "object"
+          ? String((r.user as any).name || (r.user as any).fullName || "").trim()
+          : "");
     const authorName =
       r.publisherName?.trim() ||
       r.customerId?.fullName?.trim() ||
-      r.user?.trim() ||
+      userStr ||
       "Anonymous";
     return {
       _id: r._id ?? `idx-${index}`,

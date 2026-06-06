@@ -140,13 +140,15 @@ export default function ProductPage({
     () => normalizeProductReviews(product, (reviewsRes?.data as unknown[] | undefined) ?? []),
     [product, reviewsRes?.data],
   );
-  const reviewCount = product?.commentCount ?? reviews.length;
+  const reviewCount = reviews.length > 0 ? reviews.length : (product?.commentCount ?? 0);
   const avgRatingDisplay = useMemo(() => {
+    if (reviews.length > 0) {
+      return reviews.reduce((a, r) => a + r.rating, 0) / reviews.length;
+    }
     if (product?.averageRating != null && String(product.averageRating).trim() !== "") {
       return parseAverageRating(product.averageRating);
     }
-    if (reviews.length === 0) return 0;
-    return reviews.reduce((a, r) => a + r.rating, 0) / reviews.length;
+    return 0;
   }, [product?.averageRating, reviews]);
 
   const variants = product?.variantIds ?? [];

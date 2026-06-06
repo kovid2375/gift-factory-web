@@ -61,8 +61,8 @@ export function ServicesGrid() {
 
   return (
     <section className="py-6 bg-white border-b border-gray-100">
-      <div className="container mx-auto ml-20">
-        <div className="grid grid-cols-2 lg:grid-cols-4 ">
+      <div className="container mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {services.map((item, idx) => (
             <div 
               key={idx} 
@@ -595,29 +595,29 @@ export function HomeFaqSection({ faqs }: { faqs: { question: string, answer: str
   return (
     <section className="py-4 bg-white border-t border-gray-100">
       <div className="container mx-auto px-1">
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-15 items-start">
+        <div className="grid grid-cols-1 lg:grid-cols-4  items-start">
           
           {/* Column 1: Title & View All */}
           <div className="lg:col-span-1 flex flex-col justify-start">
-            <h2 className="text-3xl font-black text-gray-900 leading-tight tracking-tight mt-15 ml-15">
-              Frequently <br />
-              Asked <br />
+            <h2 className="text-2xl md:text-2xl lg:text-3xl font-black text-gray-900 leading-tight tracking-tight lg:mt-15 lg:ml-15 md:ml-6 ml-4 mt-6">
+              Frequently <br className="hidden lg:block" />
+              Asked <br className="hidden lg:block" />
               Questions
             </h2>
-            <Link href="/help" className="text-xs font-bold text-[#cc176b] hover:underline flex items-center gap-1 ml-15">
+            <Link href="/help" className="text-lg font-bold text-[#cc176b] hover:underline flex items-center gap-1 lg:ml-15 md:ml-6 ml-4 mt-2">
               View all FAQs <ChevronRight className="h-3.5 w-3.5" />
             </Link>
           </div>
 
           {/* Column 2: Accordion questions list (takes up 2 grid columns for width) */}
-          <div className="lg:col-span-2 border border-gray-100 rounded-2xl bg-white shadow-2xs divide-y divide-gray-100 p-2">
+          <div className="lg:col-span-2 border border-gray-100 rounded-2xl bg-white shadow-2xs divide-y divide-gray-100 p-1">
             {faqs.slice(0, 4).map((f, idx) => {
               const isOpen = activeIndex === idx;
               return (
-                <div key={idx} className="p-4 transition-colors border-b-[0.5px] border-b-[#555]">
+                <div key={idx} className="p-4 transition-colors">
                   <button
                     onClick={() => setActiveIndex(isOpen ? null : idx)}
-                    className="w-full flex items-center justify-between text-left font-bold text-sm text-gray-900  transition-colors cursor-pointer"
+                    className="w-[80%] flex items-center justify-between text-left font-bold text-sm text-gray-900  transition-colors cursor-pointer"
                   >
                     <span>{f.question}</span>
                     <span className="text-[#cc176b] font-black text-lg select-none ml-4">{isOpen ? "−" : "+"}</span>

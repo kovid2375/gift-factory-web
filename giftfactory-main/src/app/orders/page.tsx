@@ -11,10 +11,20 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 import Image from "next/image";
 import { useAuthModal } from "@/provider/auth-modal-provider";
-import { ArrowLeft, CreditCard, Clock, Package, Star, Store, User } from "lucide-react";
+import { ArrowLeft, CreditCard, Clock, Package, Star, Store, User, MessageSquare } from "lucide-react";
 import { fetchOrders, fetchProductById, fetchProductReviews, submitReview } from "@/lib/api";
 import type { ApiOrder, ApiOrderItem, ApiProduct } from "@/types/api";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 
 function getStatusVariant(status: string) {
   if (status === "DELIVERED" || status === "CONFIRMED") return "default";
@@ -151,6 +161,16 @@ function OrderHistoryPageContent() {
   const [page, setPage] = useState(1);
   const [selectedRatings, setSelectedRatings] = useState<Record<string, number>>({});
   const [submittingReviewProductId, setSubmittingReviewProductId] = useState<string | null>(null);
+  const [reviewDialogOpen, setReviewDialogOpen] = useState(false);
+  const [activeReviewProduct, setActiveReviewProduct] = useState<{
+    productId: string;
+    productTitle: string;
+    productImage: string;
+    orderId: string;
+  } | null>(null);
+  const [activeRating, setActiveRating] = useState<number>(5);
+  const [commentText, setCommentText] = useState<string>("");
+  const [hoverRating, setHoverRating] = useState<number | null>(null);
   const limit = 10;
 
   useEffect(() => {
@@ -231,6 +251,18 @@ function OrderHistoryPageContent() {
     return map;
   }, [productQueries, productIds]);
 
+  const reviewQueriesSerialized = JSON.stringify(
+    reviewQueries.map((q) => {
+      const reviews = (q.data?.data ?? []) as any[];
+      return reviews.map((r) => ({
+        rating: Number(r.rating) || 0,
+        cust: typeof r.customerId === "object" ? r.customerId?._id : r.customerId,
+        userId: r.userId,
+        orderId: r.orderId,
+      }));
+    })
+  );
+
   const reviewRatingsByProduct = useMemo(() => {
     const userId = sessionData?.userId;
     if (!userId) return {} as Record<string, number>;
@@ -244,26 +276,41 @@ function OrderHistoryPageContent() {
         rating?: number;
         customerId?: string | { _id?: string } | null;
         userId?: string;
+        orderId?: string;
       }>;
 
-      const matched = reviews.find((review) => {
+      const userReviews = reviews.filter((review) => {
         if (typeof review.customerId === "string") return review.customerId === userId;
         if (review.customerId && typeof review.customerId === "object") return review.customerId._id === userId;
         if (typeof review.userId === "string") return review.userId === userId;
         return false;
       });
 
-      if (matched && typeof matched.rating === "number") {
-        next[productId] = matched.rating;
-      }
+      userReviews.forEach((review) => {
+        const oId = review.orderId;
+        const ratingVal = Number(review.rating);
+        if (oId && !isNaN(ratingVal)) {
+          next[`${oId}_${productId}`] = ratingVal;
+        }
+      });
     });
 
     return next;
-  }, [reviewQueries, productIds, sessionData?.userId]);
+  }, [productIds, sessionData?.userId, reviewQueriesSerialized]);
 
   useEffect(() => {
     if (Object.keys(reviewRatingsByProduct).length === 0) return;
-    setSelectedRatings((prev) => ({ ...prev, ...reviewRatingsByProduct }));
+    setSelectedRatings((prev) => {
+      let changed = false;
+      for (const key of Object.keys(reviewRatingsByProduct)) {
+        if (prev[key] !== reviewRatingsByProduct[key]) {
+          changed = true;
+          break;
+        }
+      }
+      if (!changed) return prev;
+      return { ...prev, ...reviewRatingsByProduct };
+    });
   }, [reviewRatingsByProduct]);
 
   const canPrev = page > 1;
@@ -274,13 +321,15 @@ function OrderHistoryPageContent() {
     return `${count} order${count === 1 ? "" : "s"}`;
   }, [meta?.count, orders.length]);
 
-  const handleReviewSubmit = async (productId: string, rating: number, orderId: string) => {
+  const handleReviewSubmit = async (productId: string, rating: number, orderId: string, comment?: string) => {
     try {
       setSubmittingReviewProductId(productId);
-      await submitReview({ productId, rating, orderId });
-      setSelectedRatings((prev) => ({ ...prev, [productId]: rating }));
+      await submitReview({ productId, rating, orderId, comment });
+      const ratingKey = `${orderId}_${productId}`;
+      setSelectedRatings((prev) => ({ ...prev, [ratingKey]: rating }));
       await queryClient.invalidateQueries({ queryKey: ["web", "product", productId] });
       toast.success("Review submitted");
+      setReviewDialogOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to submit review";
       toast.error(message);
@@ -427,7 +476,8 @@ function OrderHistoryPageContent() {
                   const variantId = item.variantId && typeof item.variantId === "object" ? item.variantId._id : undefined;
                   const productUrl = variantId ? `/products/${encodeURIComponent(productId ?? "")}?variantId=${variantId}` : `/products/${encodeURIComponent(productId ?? "")}`;
                   const isDelivered = order.status === "DELIVERED";
-                  const selectedRating = selectedRatings[productId ?? ""] ?? 0;
+                  const ratingKey = `${order._id}_${productId}`;
+                  const selectedRating = selectedRatings[ratingKey] ?? 0;
                   const isReviewed = selectedRating > 0;
 
                   return (
@@ -476,7 +526,17 @@ function OrderHistoryPageContent() {
                                   key={`${productId}-${rating}`}
                                   type="button"
                                   disabled={disabled}
-                                  onClick={() => handleReviewSubmit(productId, rating, order._id)}
+                                  onClick={() => {
+                                    setActiveReviewProduct({
+                                      productId: productId || "",
+                                      productTitle: title,
+                                      productImage: image,
+                                      orderId: order._id,
+                                    });
+                                    setActiveRating(rating);
+                                    setCommentText("");
+                                    setReviewDialogOpen(true);
+                                  }}
                                   className="rounded-sm p-0.5 transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-60"
                                   aria-label={`Rate ${rating} star${rating === 1 ? "" : "s"}`}
                                 >
@@ -593,6 +653,112 @@ function OrderHistoryPageContent() {
         </div>
       )}
       </div>
+      {/* Review Dialog with comment field */}
+      <Dialog open={reviewDialogOpen} onOpenChange={setReviewDialogOpen}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-background border border-border shadow-xl">
+          {activeReviewProduct && (
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleReviewSubmit(
+                  activeReviewProduct.productId,
+                  activeRating,
+                  activeReviewProduct.orderId,
+                  commentText
+                );
+              }}
+            >
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-lg font-bold">
+                  <MessageSquare className="h-5 w-5 text-primary" />
+                  Write a Product Review
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-1">
+                  Share your experience with this item.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 py-4">
+                {/* Product Detail */}
+                <div className="bg-muted/40 p-3 rounded-xl border border-border flex items-center gap-3">
+                  <div className="relative h-12 w-12 overflow-hidden rounded bg-muted shrink-0">
+                    <Image
+                      src={activeReviewProduct.productImage}
+                      alt={activeReviewProduct.productTitle}
+                      fill
+                      className="object-cover"
+                    />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-muted-foreground uppercase font-bold tracking-wider">Reviewing product:</p>
+                    <p className="text-xs font-semibold truncate text-foreground">{activeReviewProduct.productTitle}</p>
+                  </div>
+                </div>
+
+                {/* Stars selection */}
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">Rating *</Label>
+                  <div className="flex items-center gap-1">
+                    {[1, 2, 3, 4, 5].map((val) => {
+                      const active = hoverRating !== null ? hoverRating >= val : activeRating >= val;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => setActiveRating(val)}
+                          onMouseEnter={() => setHoverRating(val)}
+                          onMouseLeave={() => setHoverRating(null)}
+                          className="p-1 hover:scale-110 transition-transform focus:outline-none"
+                        >
+                          <Star
+                            className={`h-7 w-7 ${active ? "fill-amber-400 text-amber-400" : "text-muted-foreground/35"}`}
+                          />
+                        </button>
+                      );
+                    })}
+                    <span className="text-xs font-bold ml-2 text-muted-foreground">
+                      {activeRating} Star{activeRating > 1 && "s"}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Comment Textarea */}
+                <div className="space-y-2">
+                  <Label htmlFor="orders-review-comment" className="text-sm font-semibold">
+                    Review Comment
+                  </Label>
+                  <Textarea
+                    id="orders-review-comment"
+                    placeholder="What did you like or dislike? Write your review here..."
+                    rows={4}
+                    value={commentText}
+                    onChange={(e) => setCommentText(e.target.value)}
+                    className="rounded-xl focus-visible:ring-primary/20 resize-none text-sm"
+                  />
+                </div>
+              </div>
+
+              <DialogFooter className="gap-2 sm:gap-0 border-t border-border pt-4">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setReviewDialogOpen(false)}
+                  className="rounded-xl h-10"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={submittingReviewProductId === activeReviewProduct.productId}
+                  className="bg-[#cc176b] hover:bg-[#cc176b]/95 text-white rounded-xl h-10 px-5 font-semibold"
+                >
+                  {submittingReviewProductId === activeReviewProduct.productId ? "Submitting..." : "Submit Review"}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

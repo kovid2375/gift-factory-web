@@ -6,13 +6,13 @@ import { usePathname } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { useQuery } from "@tanstack/react-query";
 import { Home, Search, ShoppingCart, User, Heart } from "lucide-react";
-import { fetchCart } from "@/lib/api";
+import { fetchCart, fetchWishlistIds } from "@/lib/api";
 import { guestCartCount } from "@/lib/guest-cart";
 import { useAuthModal } from "@/provider/auth-modal-provider";
 
 export function MobileBottomNav() {
   const pathname = usePathname();
-  const { status } = useSession();
+  const { status, data: sessionData } = useSession();
   const { openAuthModal } = useAuthModal();
   const isAuthed = status === "authenticated";
   const [guestCount, setGuestCount] = useState(0);
@@ -22,6 +22,15 @@ export function MobileBottomNav() {
     queryFn: () => fetchCart(),
     enabled: isAuthed,
   });
+
+  const customerId = sessionData?.userId;
+  const { data: wishlistIdsRes } = useQuery({
+    queryKey: ["customer", "wishlist", "ids", customerId],
+    queryFn: () => fetchWishlistIds(customerId as string),
+    enabled: isAuthed && !!customerId,
+  });
+  
+  const wishlistCount = (wishlistIdsRes?.data ?? []).length;
 
   const carts = (cartRes?.data ?? []) as { itemsCount?: number; items?: unknown[]; status?: string }[];
   const cartCount = carts
@@ -75,6 +84,7 @@ export function MobileBottomNav() {
         {navItems.map(({ label, href, icon: Icon, exact, guestOpensAuth }) => {
           const active = isActive(href, exact);
           const isCart = label === "Cart";
+          const isWishlist = label === "Wishlist";
           const isAccount = label === "Account";
 
           if (isAccount && !isAuthed && guestOpensAuth) {
@@ -125,6 +135,11 @@ export function MobileBottomNav() {
                 {isCart && displayCartCount > 0 && (
                   <span className="absolute -top-1.5 -right-1.5 bg-amber-500 text-black text-[9px] font-bold rounded-full h-4 w-4 flex items-center justify-center leading-none">
                     {displayCartCount > 9 ? "9+" : displayCartCount}
+                  </span>
+                )}
+                {isWishlist && wishlistCount > 0 && (
+                  <span className="absolute -top-1.5 -right-1.5 bg-[#cc176b] text-white text-[9px] font-black rounded-full h-4 w-4 flex items-center justify-center leading-none">
+                    {wishlistCount}
                   </span>
                 )}
               </div>

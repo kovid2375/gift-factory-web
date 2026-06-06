@@ -132,7 +132,7 @@ export const BrandShowcase = () => {
     >
       {/* Header with Title and View All */}
       <div className="container mx-auto px-4 mb-8 flex items-center justify-between">
-        <h2 className="text-xl md:text-2xl font-black text-gray-900 tracking-tight">Featured Brands</h2>
+        <h2 className="text-xl md:text-2xl font-black  text-gray-900 tracking-tight">Featured Brands</h2>
         <Link href="/products?sortBy=brand" className="text-xs font-bold text-[#cc176b] hover:underline flex items-center gap-1 cursor-pointer">
           View all brands <ChevronRight className="h-3.5 w-3.5" />
         </Link>
@@ -149,12 +149,12 @@ export const BrandShowcase = () => {
       />
 
       {/* Row 1 — scroll left */}
-      <div className="overflow-hidden mb-3">
+      <div className="overflow-hidden mb-3 text-2xl">
         <MarqueeRow brands={brands} direction="left" speed={40} />
       </div>
 
       {/* Row 2 — scroll right (offset brands) */}
-      <div className="overflow-hidden">
+      <div className="overflow-hidden text-2xl">
         <MarqueeRow
           brands={[...brands.slice(Math.floor(brands.length / 2)), ...brands.slice(0, Math.floor(brands.length / 2))]}
           direction="right"
