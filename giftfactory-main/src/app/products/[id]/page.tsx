@@ -591,36 +591,9 @@ export default function ProductPage({
       toast.error(availableStock === 0 ? "This variant is out of stock" : `Only ${availableStock} units available`);
       return;
     }
-    setBuyingNow(true);
-    try {
-      // First, add the product to the cart
-      let res;
-      if (selectedVariant?._id) {
-        res = await addCartItem({
-          item: {
-            productId: product._id,
-            variantId: selectedVariant._id,
-            quantity: effectiveQuantity,
-          },
-        });
-      } else {
-        res = await addCartItem({
-          item: {
-            productId: product._id,
-            quantity: effectiveQuantity,
-          },
-        });
-      }
-      mergeCartIntoCache(queryClient, res);
 
-      // Then redirect to checkout
-      router.push(`/checkout`);
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? err?.message ?? "Failed to buy now";
-      toast.error(msg);
-    } finally {
-      setBuyingNow(false);
-    }
+    const variantParam = selectedVariant?._id ? `&variantId=${selectedVariant._id}` : "";
+    router.push(`/checkout?productId=${product._id}${variantParam}&quantity=${effectiveQuantity}&price=${price}`);
   };
 
   const handleWishlist = async () => {

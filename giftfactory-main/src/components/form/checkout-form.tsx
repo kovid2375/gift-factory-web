@@ -27,8 +27,8 @@ import {
 } from "@/components/ui/dialog";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { MapPin, Plus, Save, Mail, Truck, CreditCard, Smartphone, Wallet, Globe, Banknote, Phone } from "lucide-react";
-import { createOrder, createOrderFromCart, fetchAddresses, addAddress, fetchProductById, deleteCart, fetchProfile, sendPhoneOtp, verifyPhoneOtp, updateProfile, validateCoupon, fetchOrders } from "@/lib/api";
-import type { PaymentMethod, ApiCoupon, CreateOrderBody } from "@/lib/api";
+import { createOrder, createOrderFromCart, fetchAddresses, addAddress, fetchProductById, deleteCart, fetchProfile, sendPhoneOtp, verifyPhoneOtp, updateProfile, validateCoupon, fetchOrders, fetchCheckoutPreview } from "@/lib/api";
+import type { PaymentMethod, ApiCoupon, CreateOrderBody, CreateOrderFromCartBody } from "@/lib/api";
 import { openRazorpayCheckout } from "@/lib/payments";
 import type { ApiAddress, ApiCart, ApiCartItem, ApiProduct } from "@/types/api";
 import { apiAddressPostalCode, apiAddressStreet } from "@/types/api";
@@ -60,6 +60,7 @@ const formSchema = z.object({
   paymentMethod: z.enum(["wallet", "card", "upi", "cod", "online"]),
   discountCode: z.string().optional(),
   giftMessage: z.string().optional(),
+  fulfillmentPreference: z.enum(["SINGLE_ONLY", "ALLOW_SPLIT", "EMERGENCY_PARTIAL"]),
 });
 
 type CheckoutFormValues = z.infer<typeof formSchema>;
@@ -202,12 +203,27 @@ export function CheckoutForm({ carts, cartId, productMap, appliedCoupon, onCoupo
       zipCode: "",
       paymentMethod: "cod",
       discountCode: "",
+      fulfillmentPreference: "ALLOW_SPLIT",
     },
   });
   const selectedCountry = form.watch("country");
   const selectedState = form.watch("state");
   const selectedCity = form.watch("city");
   const formPhone = form.watch("phone");
+
+  const selectedFulfillment = form.watch("fulfillmentPreference");
+
+  const { data: previewRes, isLoading: previewLoading, error: previewError } = useQuery({
+    queryKey: ["customer", "checkout-preview", cartId, selectedFulfillment, coords.latitude, coords.longitude],
+    queryFn: () => fetchCheckoutPreview(cartId!, {
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      fulfillmentPreference: selectedFulfillment,
+    }),
+    enabled: !!cartId,
+    staleTime: 5000,
+  });
+
   // Prefer phone typed in the form over profile phone
   const effectiveContact = normalizePhoneForRazorpay(formPhone || "") ?? normalizePhoneForRazorpay(rawPhone);
 
@@ -428,9 +444,34 @@ export function CheckoutForm({ carts, cartId, productMap, appliedCoupon, onCoupo
       isInterState: false,
     };
 
+    const orderFromCartPayload: CreateOrderFromCartBody = {
+      fulfillmentPreference: values.fulfillmentPreference,
+      onlinePaymentMethod: values.paymentMethod === "cod" ? "COD" : "ONLINE",
+      latitude: coords.latitude,
+      longitude: coords.longitude,
+      address: {
+        street: values.addressLine2?.trim()
+          ? `${values.addressLine1.trim()}, ${values.addressLine2.trim()}`
+          : values.addressLine1.trim(),
+        city: values.city.trim(),
+        state: values.state.trim(),
+        postalCode: values.zipCode.trim(),
+        country: values.country.trim(),
+      },
+      giftMessage: values.giftMessage?.trim() || "",
+      discountCode: values.discountCode?.trim() || "",
+      isInterState: false,
+    };
+
+    const isCartCheckout = !!cartId && cartId !== "buy-now";
+
     // COD -> create order immediately
     if (values.paymentMethod === "cod") {
-      createOrderMutation.mutate(orderPayload);
+      if (isCartCheckout) {
+        createOrderFromCartMutation.mutate({ id: cartId, body: orderFromCartPayload });
+      } else {
+        createOrderMutation.mutate(orderPayload);
+      }
       return;
     }
 
@@ -445,7 +486,9 @@ export function CheckoutForm({ carts, cartId, productMap, appliedCoupon, onCoupo
 
       setPaymentLoading(true);
 
-      const orderRes = await createOrder(orderPayload);
+      const orderRes = isCartCheckout
+        ? await createOrderFromCart(cartId, orderFromCartPayload)
+        : await createOrder(orderPayload);
       console.log("[checkout-form] createOrder response:", orderRes);
 
       const findKeyInObj = (obj: any, keys: string[]): string | undefined => {
@@ -935,6 +978,142 @@ export function CheckoutForm({ carts, cartId, productMap, appliedCoupon, onCoupo
                 </FormItem>
               )}
             />
+          </div>
+
+          {/* ── Fulfillment Option ── */}
+          <div className="rounded-xl border bg-white p-5 sm:p-6 shadow-sm space-y-4">
+            <div className="flex items-center gap-2 pb-1 border-b">
+              <Truck className="h-4 w-4 text-primary" />
+              <h3 className="font-semibold text-base">Fulfillment Option</h3>
+            </div>
+
+            <FormField
+              control={form.control}
+              name="fulfillmentPreference"
+              render={({ field }) => (
+                <FormItem className="space-y-4">
+                  <FormControl>
+                    <RadioGroup
+                      onValueChange={field.onChange}
+                      value={field.value}
+                      className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+                    >
+                      {[
+                        {
+                          value: "ALLOW_SPLIT",
+                          label: "Split Delivery",
+                          desc: "Multiple shipments, faster delivery.",
+                          icon: Truck,
+                        },
+                        {
+                          value: "SINGLE_ONLY",
+                          label: "Single Shipment",
+                          desc: "All items shipped together.",
+                          icon: Save,
+                        },
+                        {
+                          value: "EMERGENCY_PARTIAL",
+                          label: "Partial Shipment",
+                          desc: "Ship available, rest later.",
+                          icon: MapPin,
+                        },
+                      ].map(({ value, label, desc, icon: Icon }) => (
+                        <FormItem key={value} className="space-y-0 flex">
+                          <FormControl>
+                            <RadioGroupItem value={value} className="sr-only" id={`fp-${value}`} />
+                          </FormControl>
+                          <FormLabel
+                            htmlFor={`fp-${value}`}
+                            className={`flex flex-col flex-1 gap-1 cursor-pointer rounded-lg border-2 p-3 transition-all ${
+                              field.value === value
+                                ? "border-primary bg-primary/5 text-primary"
+                                : "border-border bg-background hover:border-primary/40 hover:bg-muted/40"
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <Icon className="h-4 w-4 shrink-0 text-primary" />
+                              <span className="font-semibold text-sm leading-none">{label}</span>
+                            </div>
+                            <span className="text-[11px] text-muted-foreground font-normal leading-normal">{desc}</span>
+                          </FormLabel>
+                        </FormItem>
+                      ))}
+                    </RadioGroup>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Preview results details (only when cartId exists) */}
+            {cartId && (
+              <>
+                {previewLoading && (
+                  <div className="animate-pulse space-y-2 py-3">
+                    <div className="h-4 bg-muted rounded w-2/3" />
+                    <div className="h-4 bg-muted rounded w-1/2" />
+                  </div>
+                )}
+
+                {previewError && (
+                  <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-3 rounded-lg">
+                    Fulfillment details unavailable. Using default routing.
+                  </div>
+                )}
+
+                {previewRes?.success && previewRes.data && (
+                  <div className="rounded-lg border border-primary/20 bg-primary/5 p-4 space-y-3 text-sm">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <span className="text-muted-foreground block text-xs uppercase font-bold tracking-wider">Store / Franchise</span>
+                        <span className="font-medium text-foreground text-xs">{previewRes.data.franchiseName || "Local Hub"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-xs uppercase font-bold tracking-wider">Est. Delivery</span>
+                        <span className="font-medium text-foreground text-xs">{previewRes.data.estimatedDelivery || "Standard"}</span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground block text-xs uppercase font-bold tracking-wider">Distance</span>
+                        <span className="font-medium text-foreground text-xs">
+                          {previewRes.data.distanceKm ? `${previewRes.data.distanceKm.toFixed(1)} km` : "N/A"}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Allocated Items lists */}
+                    {previewRes.data.items && previewRes.data.items.length > 0 && (
+                      <div className="pt-3 border-t border-primary/10 space-y-2">
+                        <span className="text-muted-foreground block text-xs uppercase font-bold tracking-wider">Item Allocation Details</span>
+                        <div className="divide-y divide-primary/5">
+                          {previewRes.data.items.map((item) => {
+                            const hasShortfall = item.shortfallQuantity > 0;
+                            return (
+                              <div key={item.productId + (item.variantId || "")} className="flex items-center justify-between text-xs py-1.5 first:pt-0 last:pb-0">
+                                <span className="text-muted-foreground truncate pr-2 max-w-[65%]">
+                                  {item.productName} {item.variantName ? `(${item.variantName})` : ""}
+                                </span>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  <span className="font-medium">Qty: {item.quantity}</span>
+                                  {hasShortfall ? (
+                                    <span className="text-[10px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 font-medium">
+                                      Allocated: {item.allocatedQuantity} ({item.shortfallQuantity} short)
+                                    </span>
+                                  ) : (
+                                    <span className="text-[10px] text-green-700 bg-green-50 px-2 py-0.5 rounded border border-green-200 font-medium">
+                                      Available
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
           {/* ── Payment ── */}

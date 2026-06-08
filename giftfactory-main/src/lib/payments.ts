@@ -1,5 +1,6 @@
 import { axiosInstance } from "@/lib/axios";
 import { verifyPayment } from "@/lib/api";
+import { API_ENDPOINTS } from "@/constants/api";
 
 type RazorpayCreateOptions = {
   key: string;
@@ -58,8 +59,8 @@ export async function openRazorpayCheckout(params: {
         ...(params.orderPayload ? { orderPayload: params.orderPayload } : {}),
       };
 
-  const createRes = await axiosInstance.post("/payment/orders", requestBody);
-  console.log("[payments] /payment/orders response:", createRes.data);
+  const createRes = await axiosInstance.post(API_ENDPOINTS.payment.createOrder, requestBody);
+  console.log("[payments] createOrder response:", createRes.data);
 
   const res = createRes.data;
   const orderData = (res && (res as any).data) ? (res as any).data : (res as any);

@@ -1039,19 +1039,70 @@ export interface CreateOrderBody {
   isInterState: boolean;
 }
 
+export interface CheckoutPreviewParams {
+  latitude?: number;
+  longitude?: number;
+  fulfillmentPreference?: "SINGLE_ONLY" | "ALLOW_SPLIT" | "EMERGENCY_PARTIAL";
+}
+
+export interface CheckoutPreviewResponseItem {
+  productId: string;
+  productName: string;
+  variantId?: string;
+  variantName?: string;
+  quantity: number;
+  requestedQuantity: number;
+  allocatedQuantity: number;
+  unitPrice: number;
+  availableStock: number;
+  shortfallQuantity: number;
+}
+
+export interface CheckoutPreviewResponse {
+  success: boolean;
+  mode: string;
+  franchiseId?: string;
+  franchiseName?: string;
+  items: CheckoutPreviewResponseItem[];
+  estimatedDelivery?: string;
+  distanceKm?: number;
+}
+
+export async function fetchCheckoutPreview(
+  cartId: string,
+  params?: CheckoutPreviewParams
+): Promise<ApiResponse<CheckoutPreviewResponse>> {
+  const { data } = await get(API_ENDPOINTS.customer.checkoutPreview(cartId), { params });
+  return data;
+}
+
 export async function createOrder(body: CreateOrderBody): Promise<ApiResponse<ApiOrder>> {
   const { data } = await post(API_ENDPOINTS.customer.orders, body);
   return data;
 }
 
+export interface CreateOrderFromCartBody {
+  fulfillmentPreference?: "SINGLE_ONLY" | "ALLOW_SPLIT" | "EMERGENCY_PARTIAL";
+  onlinePaymentMethod?: "COD" | "ONLINE";
+  latitude?: number;
+  longitude?: number;
+  address: {
+    street: string;
+    city: string;
+    state: string;
+    postalCode: string;
+    country: string;
+  };
+  shippingFee?: number;
+  discountCode?: string;
+  referralCode?: string;
+  isInterState?: boolean;
+  giftMessage?: string;
+}
+
 export async function createOrderFromCart(
   cartId: string,
-  body: {
-    paymentMethod: PaymentMethod;
-    shippingFee: number;
-    shippingAddress: DeliveryAddress;
-    discountCode?: string;
-  }
+  body: CreateOrderFromCartBody
 ): Promise<ApiResponse<ApiOrder>> {
   const { data } = await post(API_ENDPOINTS.customer.orderFromCart(cartId), body);
   return data;
