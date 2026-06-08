@@ -1,4 +1,4 @@
-export { AddressForm } from "./address-form"
+export { AddressForm, type AddressFormSubmitData } from "./address-form"
 export { CheckoutForm } from "./checkout-form"
 export { SignIn as SignInForm } from "./signin"
 export { SearchForm } from "./search"

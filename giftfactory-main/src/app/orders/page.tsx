@@ -12,7 +12,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useAuthModal } from "@/provider/auth-modal-provider";
 import { ArrowLeft, CreditCard, Clock, Package, Star, Store, User, MessageSquare } from "lucide-react";
-import { fetchOrders, fetchProductById, fetchProductReviews, submitReview } from "@/lib/api";
+import { fetchOrders, fetchProductById, fetchProductReviews, submitReview, updateReview } from "@/lib/api";
 import type { ApiOrder, ApiOrderItem, ApiProduct } from "@/types/api";
 import { toast } from "sonner";
 import {
@@ -171,6 +171,7 @@ function OrderHistoryPageContent() {
   const [activeRating, setActiveRating] = useState<number>(5);
   const [commentText, setCommentText] = useState<string>("");
   const [hoverRating, setHoverRating] = useState<number | null>(null);
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const limit = 10;
 
   useEffect(() => {
@@ -255,7 +256,9 @@ function OrderHistoryPageContent() {
     reviewQueries.map((q) => {
       const reviews = (q.data?.data ?? []) as any[];
       return reviews.map((r) => ({
+        id: r._id || r.id,
         rating: Number(r.rating) || 0,
+        comment: r.comment,
         cust: typeof r.customerId === "object" ? r.customerId?._id : r.customerId,
         userId: r.userId,
         orderId: r.orderId,
@@ -263,17 +266,20 @@ function OrderHistoryPageContent() {
     })
   );
 
-  const reviewRatingsByProduct = useMemo(() => {
+  const userReviewsMap = useMemo(() => {
     const userId = sessionData?.userId;
-    if (!userId) return {} as Record<string, number>;
+    if (!userId) return {} as Record<string, { id: string; rating: number; comment: string }>;
 
-    const next: Record<string, number> = {};
+    const next: Record<string, { id: string; rating: number; comment: string }> = {};
     reviewQueries.forEach((query, index) => {
       const productId = productIds[index];
       if (!productId) return;
 
       const reviews = (query.data?.data ?? []) as Array<{
+        _id?: string;
+        id?: string;
         rating?: number;
+        comment?: string;
         customerId?: string | { _id?: string } | null;
         userId?: string;
         orderId?: string;
@@ -289,8 +295,13 @@ function OrderHistoryPageContent() {
       userReviews.forEach((review) => {
         const oId = review.orderId;
         const ratingVal = Number(review.rating);
-        if (oId && !isNaN(ratingVal)) {
-          next[`${oId}_${productId}`] = ratingVal;
+        const rId = review._id || review.id;
+        if (oId && !isNaN(ratingVal) && rId) {
+          next[`${oId}_${productId}`] = {
+            id: rId,
+            rating: ratingVal,
+            comment: review.comment || "",
+          };
         }
       });
     });
@@ -299,19 +310,20 @@ function OrderHistoryPageContent() {
   }, [productIds, sessionData?.userId, reviewQueriesSerialized]);
 
   useEffect(() => {
-    if (Object.keys(reviewRatingsByProduct).length === 0) return;
+    if (Object.keys(userReviewsMap).length === 0) return;
     setSelectedRatings((prev) => {
       let changed = false;
-      for (const key of Object.keys(reviewRatingsByProduct)) {
-        if (prev[key] !== reviewRatingsByProduct[key]) {
+      const nextRatings = { ...prev };
+      for (const key of Object.keys(userReviewsMap)) {
+        if (prev[key] !== userReviewsMap[key].rating) {
+          nextRatings[key] = userReviewsMap[key].rating;
           changed = true;
-          break;
         }
       }
       if (!changed) return prev;
-      return { ...prev, ...reviewRatingsByProduct };
+      return nextRatings;
     });
-  }, [reviewRatingsByProduct]);
+  }, [userReviewsMap]);
 
   const canPrev = page > 1;
   const canNext = page < (meta?.totalPages ?? 1);
@@ -324,11 +336,17 @@ function OrderHistoryPageContent() {
   const handleReviewSubmit = async (productId: string, rating: number, orderId: string, comment?: string) => {
     try {
       setSubmittingReviewProductId(productId);
-      await submitReview({ productId, rating, orderId, comment });
+      if (activeReviewId) {
+        await updateReview(activeReviewId, { rating, comment });
+        toast.success("Review updated successfully");
+      } else {
+        await submitReview({ productId, rating, orderId, comment });
+        toast.success("Review submitted successfully");
+      }
       const ratingKey = `${orderId}_${productId}`;
       setSelectedRatings((prev) => ({ ...prev, [ratingKey]: rating }));
       await queryClient.invalidateQueries({ queryKey: ["web", "product", productId] });
-      toast.success("Review submitted");
+      await queryClient.invalidateQueries({ queryKey: ["web", "product", productId, "reviews"] });
       setReviewDialogOpen(false);
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to submit review";
@@ -527,6 +545,8 @@ function OrderHistoryPageContent() {
                                   type="button"
                                   disabled={disabled}
                                   onClick={() => {
+                                    const ratingKey = `${order._id}_${productId}`;
+                                    const existing = userReviewsMap[ratingKey];
                                     setActiveReviewProduct({
                                       productId: productId || "",
                                       productTitle: title,
@@ -534,7 +554,8 @@ function OrderHistoryPageContent() {
                                       orderId: order._id,
                                     });
                                     setActiveRating(rating);
-                                    setCommentText("");
+                                    setCommentText(existing?.comment || "");
+                                    setActiveReviewId(existing?.id || null);
                                     setReviewDialogOpen(true);
                                   }}
                                   className="rounded-sm p-0.5 transition-transform hover:scale-110 disabled:cursor-not-allowed disabled:opacity-60"
@@ -671,7 +692,7 @@ function OrderHistoryPageContent() {
               <DialogHeader>
                 <DialogTitle className="flex items-center gap-2 text-lg font-bold">
                   <MessageSquare className="h-5 w-5 text-primary" />
-                  Write a Product Review
+                  {activeReviewId ? "Edit Product Review" : "Write a Product Review"}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-1">
                   Share your experience with this item.
@@ -752,7 +773,11 @@ function OrderHistoryPageContent() {
                   disabled={submittingReviewProductId === activeReviewProduct.productId}
                   className="bg-[#cc176b] hover:bg-[#cc176b]/95 text-white rounded-xl h-10 px-5 font-semibold"
                 >
-                  {submittingReviewProductId === activeReviewProduct.productId ? "Submitting..." : "Submit Review"}
+                  {submittingReviewProductId === activeReviewProduct.productId 
+                    ? "Saving..." 
+                    : activeReviewId 
+                      ? "Update Review" 
+                      : "Submit Review"}
                 </Button>
               </DialogFooter>
             </form>

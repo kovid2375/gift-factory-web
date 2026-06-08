@@ -295,6 +295,7 @@ function ProductListPageContent() {
               <SelectContent>
                 <SelectItem value="createdAt-desc">Newest first</SelectItem>
                 <SelectItem value="createdAt-asc">Oldest first</SelectItem>
+                <SelectItem value="popular-desc">Popularity</SelectItem>
                 <SelectItem value="defaultPrice-asc">Price: Low to High</SelectItem>
                 <SelectItem value="defaultPrice-desc">Price: High to Low</SelectItem>
                 <SelectItem value="title-asc">Name A–Z</SelectItem>

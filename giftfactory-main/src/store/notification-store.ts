@@ -2,6 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { axiosInstance } from '@/lib/axios';
+import { API_ENDPOINTS } from '@/constants/api';
 
 const get = axiosInstance.get.bind(axiosInstance);
 const patch = axiosInstance.patch.bind(axiosInstance);
@@ -25,7 +26,7 @@ export function useNotifications(options?: { enabled?: boolean }) {
   return useQuery<NotificationItem[]>({
     queryKey: ['notifications'],
     queryFn: async () => {
-      const { data } = await get('/notifications');
+      const { data } = await get(API_ENDPOINTS.customer.notifications);
       const raw = data?.data ?? data ?? [];
       return (Array.isArray(raw) ? raw : []).map((item: any) => ({
         ...item,
@@ -44,7 +45,7 @@ export function useMarkAsRead() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (id: string) => {
-      const { data } = await patch(`/notifications/${id}/read`);
+      const { data } = await patch(API_ENDPOINTS.customer.notificationRead(id));
       return data;
     },
     onSuccess: () => {

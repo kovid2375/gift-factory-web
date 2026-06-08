@@ -261,6 +261,9 @@ export async function fetchProducts(params?: FetchProductsParams): Promise<ApiRe
   if (mappedSort) {
     paramsToSend.sortBy = mappedSort;
     delete paramsToSend.order;
+  } else {
+    delete paramsToSend.sortBy;
+    delete paramsToSend.order;
   }
 
   const { data } = await get(API_ENDPOINTS.web.products, { params: paramsToSend });
@@ -1249,6 +1252,24 @@ export async function submitReview(body: {
 /** Get a single product review by ID. */
 export async function fetchReviewById(id: string): Promise<ApiResponse<unknown>> {
   const { data } = await get(API_ENDPOINTS.customer.reviewById(id));
+  return data;
+}
+
+/** Update an existing product review (auth required). You can pass only the fields you wish to update (e.g., only the comment). */
+export async function updateReview(
+  id: string,
+  body: {
+    rating?: number;
+    comment?: string;
+    approved?: boolean;
+  }
+): Promise<ApiResponse<unknown>> {
+  const payload: Record<string, any> = {};
+  if (body.rating !== undefined) payload.rating = body.rating;
+  if (body.comment !== undefined) payload.comment = body.comment;
+  if (body.approved !== undefined) payload.approved = body.approved;
+
+  const { data } = await patch(API_ENDPOINTS.customer.reviewById(id), payload);
   return data;
 }
 

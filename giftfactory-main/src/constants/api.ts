@@ -95,6 +95,8 @@ export const API_ENDPOINTS = {
     addressSetDefault: (id: string) => `${BASE}/address/${encodeURIComponent(id)}/set-default`,
     reviews: `${BASE}/product-reviews`,
     reviewById: (id: string) => `${BASE}/product-reviews/${encodeURIComponent(id)}`,
+    notifications: `${BASE}/notifications`,
+    notificationRead: (id: string) => `${BASE}/notifications/${encodeURIComponent(id)}/read`,
     searchHistory: `${BASE}/customer/search-history`,
     recommended: `${BASE}/customer/recommended`,
     viewProduct: `${BASE}/customer/view-product`,

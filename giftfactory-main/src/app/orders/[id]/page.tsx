@@ -20,7 +20,7 @@ import {
   Star,
   X,
 } from "lucide-react";
-import { submitReview, fetchOrderById, fetchOrderByOrderNumber, returnRequestOrder, createSupportTicket, fetchProductById, cancelOrder } from "@/lib/api";
+import { submitReview, fetchOrderById, fetchOrderByOrderNumber, returnRequestOrder, createSupportTicket, fetchProductById, cancelOrder, fetchProductReviews, updateReview } from "@/lib/api";
 import { useAuthModal } from "@/provider/auth-modal-provider";
 import {
   Dialog,
@@ -399,7 +399,7 @@ export default function OrderDetailPage({
 }) {
   const idOrNumber = use(params).id;
   const queryClient = useQueryClient();
-  const { status: sessionStatus } = useSession();
+  const { status: sessionStatus, data: sessionData } = useSession();
   const router = useRouter();
   const { openAuthModal } = useAuthModal();
   const authOpenedRef = useRef(false);
@@ -436,6 +436,71 @@ export default function OrderDetailPage({
       enabled: !!id && sessionStatus === "authenticated",
     })),
   });
+
+  const reviewQueries = useQueries({
+    queries: productIds.map((id) => ({
+      queryKey: ["web", "product", id, "reviews"],
+      queryFn: () => fetchProductReviews(id),
+      enabled: !!id && sessionStatus === "authenticated",
+    })),
+  });
+
+  const reviewQueriesSerialized = JSON.stringify(
+    reviewQueries.map((q) => {
+      const reviews = (q.data?.data ?? []) as any[];
+      return reviews.map((r) => ({
+        id: r._id || r.id,
+        rating: Number(r.rating) || 0,
+        comment: r.comment,
+        cust: typeof r.customerId === "object" ? r.customerId?._id : r.customerId,
+        userId: r.userId,
+        orderId: r.orderId,
+      }));
+    })
+  );
+
+  const userReviewsMap = useMemo(() => {
+    const userId = sessionData?.userId;
+    if (!userId) return {} as Record<string, { id: string; rating: number; comment: string }>;
+
+    const next: Record<string, { id: string; rating: number; comment: string }> = {};
+    reviewQueries.forEach((query, index) => {
+      const productId = productIds[index];
+      if (!productId) return;
+
+      const reviews = (query.data?.data ?? []) as Array<{
+        _id?: string;
+        id?: string;
+        rating?: number;
+        comment?: string;
+        customerId?: string | { _id?: string } | null;
+        userId?: string;
+        orderId?: string;
+      }>;
+
+      const userReviews = reviews.filter((review) => {
+        if (typeof review.customerId === "string") return review.customerId === userId;
+        if (review.customerId && typeof review.customerId === "object") return review.customerId._id === userId;
+        if (typeof review.userId === "string") return review.userId === userId;
+        return false;
+      });
+
+      userReviews.forEach((review) => {
+        const oId = review.orderId;
+        const ratingVal = Number(review.rating);
+        const rId = review._id || review.id;
+        if (oId && !isNaN(ratingVal) && rId) {
+          next[`${oId}_${productId}`] = {
+            id: rId,
+            rating: ratingVal,
+            comment: review.comment || "",
+          };
+        }
+      });
+    });
+
+    return next;
+  }, [productIds, sessionData?.userId, reviewQueriesSerialized]);
   const productMap = useMemo(() => {
     const map = new Map<string, ApiProduct>();
     productQueries.forEach((q, i) => {
@@ -452,6 +517,7 @@ export default function OrderDetailPage({
   const [reviewRating, setReviewRating] = useState(0);
   const [reviewComment, setReviewComment] = useState("");
   const [isSubmittingReview, setIsSubmittingReview] = useState(false);
+  const [activeReviewId, setActiveReviewId] = useState<string | null>(null);
   const [returnDialogOpen, setReturnDialogOpen] = useState(false);
   const [returnRequestType, setReturnRequestType] = useState<"return" | "exchange">("return");
   const [returnReason, setReturnReason] = useState("");
@@ -464,9 +530,12 @@ export default function OrderDetailPage({
   const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
 
   const handleOpenReview = (productId: string, title: string) => {
+    const ratingKey = `${order?._id}_${productId}`;
+    const existing = userReviewsMap[ratingKey];
     setReviewItem({ productId, title });
-    setReviewRating(0);
-    setReviewComment("");
+    setReviewRating(existing?.rating || 0);
+    setReviewComment(existing?.comment || "");
+    setActiveReviewId(existing?.id || null);
   };
 
   const returnRequestMutation = useMutation({
@@ -549,18 +618,28 @@ export default function OrderDetailPage({
     }
     setIsSubmittingReview(true);
     try {
-      const res = await submitReview({
-        productId: reviewItem.productId,
-        orderId: order?._id,
-        rating: reviewRating,
-        comment: reviewComment,
-      });
-      if (res.success || res.status === 200 || res.status === 201) {
-        toast.success("Review submitted successfully");
-        setReviewItem(null);
+      if (activeReviewId) {
+        await updateReview(activeReviewId, {
+          rating: reviewRating,
+          comment: reviewComment,
+        });
+        toast.success("Review updated successfully");
       } else {
-        toast.error(res.message || "Failed to submit review");
+        const res = await submitReview({
+          productId: reviewItem.productId,
+          orderId: order?._id,
+          rating: reviewRating,
+          comment: reviewComment,
+        });
+        if (res.success || res.status === 200 || res.status === 201) {
+          toast.success("Review submitted successfully");
+        } else {
+          toast.error(res.message || "Failed to submit review");
+        }
       }
+      await queryClient.invalidateQueries({ queryKey: ["web", "product", reviewItem.productId] });
+      await queryClient.invalidateQueries({ queryKey: ["web", "product", reviewItem.productId, "reviews"] });
+      setReviewItem(null);
     } catch (e: any) {
       toast.error(e.message || "An error occurred while submitting your review");
     } finally {
@@ -826,13 +905,19 @@ export default function OrderDetailPage({
                             {order.status === "DELIVERED" && (
                               <div className="mt-2 flex flex-wrap gap-2">
                                 {product?._id && (
-                                  <Button
-                                    variant="link"
-                                    className="p-0 h-auto text-xs text-primary"
-                                    onClick={() => handleOpenReview(product._id, title)}
-                                  >
-                                    Write a Review
-                                  </Button>
+                                  (() => {
+                                    const ratingKey = `${order._id}_${product._id}`;
+                                    const isReviewed = !!userReviewsMap[ratingKey];
+                                    return (
+                                      <Button
+                                        variant="link"
+                                        className="p-0 h-auto text-xs text-primary"
+                                        onClick={() => handleOpenReview(product._id, title)}
+                                      >
+                                        {isReviewed ? "Edit Review" : "Write a Review"}
+                                      </Button>
+                                    );
+                                  })()
                                 )}
                                 <Button
                                   variant="outline"
@@ -922,7 +1007,7 @@ export default function OrderDetailPage({
       <Dialog open={!!reviewItem} onOpenChange={(open) => !open && setReviewItem(null)}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>Review {reviewItem?.title}</DialogTitle>
+            <DialogTitle>{activeReviewId ? "Edit Review" : "Review"} for {reviewItem?.title}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="flex justify-center gap-1">
@@ -962,7 +1047,7 @@ export default function OrderDetailPage({
               Cancel
             </Button>
             <Button onClick={handleSubmitReview} disabled={!reviewRating || isSubmittingReview}>
-              {isSubmittingReview ? "Submitting..." : "Submit Review"}
+              {isSubmittingReview ? "Saving..." : activeReviewId ? "Update Review" : "Submit Review"}
             </Button>
           </div>
         </DialogContent>
