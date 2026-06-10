@@ -288,11 +288,21 @@ export async function fetchProductById(id: string): Promise<ApiResponse<ApiProdu
 
 export async function fetchProductSuggest(query: string, page = 1, limit = 20): Promise<{ data: { id: string; title: string; slug?: string }[] }> {
   try {
-    const { data: res } = await get(API_ENDPOINTS.elasticSearch.suggest, {
-      params: { q: query, page, limit }
+    const { data: res } = await get(API_ENDPOINTS.elasticSearch.products, {
+      params: { autoComplete: query, page, limit }
     });
-    const raw = res?.data ?? res ?? [];
-    const list = Array.isArray(raw) ? raw : (raw.suggestions ?? raw.data ?? []);
+    
+    let list: any[] = [];
+    if (Array.isArray(res?.meta?.suggestions)) {
+      list = res.meta.suggestions;
+    } else if (Array.isArray(res?.suggestions)) {
+      list = res.suggestions;
+    } else if (Array.isArray(res?.data?.suggestions)) {
+      list = res.data.suggestions;
+    } else {
+      const raw = res?.data ?? res ?? [];
+      list = Array.isArray(raw) ? raw : (raw.suggestions ?? raw.data ?? []);
+    }
 
     const results = list.map((item: any) => ({
       id: item.id || item._id || item.productId || item.text || "",
@@ -308,22 +318,29 @@ export async function fetchProductSuggest(query: string, page = 1, limit = 20): 
 
 export async function fetchSearchAutoComplete(query: string, page = 1, limit = 20): Promise<{ data: any[]; meta: { suggestions: { text: string; type: string; confidence: number }[] } }> {
   try {
-    const { data: suggestRes } = await get(API_ENDPOINTS.elasticSearch.suggest, {
-      params: { q: query, page, limit }
+    const { data: res } = await get(API_ENDPOINTS.elasticSearch.products, {
+      params: { autoComplete: query, page, limit }
     });
-    const suggestRaw = suggestRes?.data ?? suggestRes ?? [];
-    const suggestionsList = Array.isArray(suggestRaw) ? suggestRaw : (suggestRaw.suggestions ?? []);
+
+    let suggestionsList: any[] = [];
+    if (Array.isArray(res?.meta?.suggestions)) {
+      suggestionsList = res.meta.suggestions;
+    } else if (Array.isArray(res?.suggestions)) {
+      suggestionsList = res.suggestions;
+    } else if (Array.isArray(res?.data?.suggestions)) {
+      suggestionsList = res.data.suggestions;
+    } else {
+      const raw = res?.data ?? res ?? [];
+      suggestionsList = Array.isArray(raw) ? raw : (raw.suggestions ?? []);
+    }
 
     const suggestions = suggestionsList.map((item: any) => ({
-      text: item.name || item.title || item.text || "",
-      type: "product",
-      confidence: 100
+      text: item.text || item.name || item.title || "",
+      type: item.type || "product",
+      confidence: item.confidence ?? 100
     }));
 
-    const { data: productsRes } = await get(API_ENDPOINTS.elasticSearch.products, {
-      params: { query, page, limit }
-    });
-    const productsRaw = productsRes?.data ?? productsRes ?? [];
+    const productsRaw = res?.data ?? [];
     const productsList = Array.isArray(productsRaw) ? productsRaw : (productsRaw.products ?? productsRaw.data ?? []);
 
     return {
