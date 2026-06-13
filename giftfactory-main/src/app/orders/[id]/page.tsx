@@ -652,16 +652,33 @@ export default function OrderDetailPage({
     if (!orderNo) return;
     setDownloadingInvoice(true);
     try {
-      const res = await downloadInvoice(orderNo);
+      const response = await downloadInvoice(orderNo);
+      const blob = response.data;
+      const contentType = response.headers["content-type"] || "";
 
-      if (res?.data?.url) {
-        window.open(res.data.url, "_blank");
-        toast.success("Invoice download started");
-        return;
-      }
-
-      const htmlContent = res?.data?.html || (typeof res?.data === "string" ? res.data : null);
-      if (htmlContent) {
+      if (contentType.includes("application/json")) {
+        const text = await blob.text();
+        const res = JSON.parse(text);
+        if (res?.data?.url) {
+          window.open(res.data.url, "_blank");
+          toast.success("Invoice download started");
+          return;
+        }
+        const htmlContent = res?.data?.html || (typeof res?.data === "string" ? res.data : null) || res?.html;
+        if (htmlContent) {
+          const win = window.open("", "_blank");
+          if (win) {
+            win.document.write(htmlContent);
+            win.document.close();
+            win.print();
+            toast.success("Invoice generated");
+          } else {
+            toast.error("Pop-up blocked. Please allow pop-ups for this site to view the invoice.");
+          }
+          return;
+        }
+      } else if (contentType.includes("text/html")) {
+        const htmlContent = await blob.text();
         const win = window.open("", "_blank");
         if (win) {
           win.document.write(htmlContent);
@@ -672,12 +689,33 @@ export default function OrderDetailPage({
           toast.error("Pop-up blocked. Please allow pop-ups for this site to view the invoice.");
         }
         return;
+      } else {
+        // Assume PDF or other binary file stream: download client-side using object URL
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+
+        // Try to retrieve filename from content-disposition header
+        let filename = `invoice-${orderNo}.pdf`;
+        const disposition = response.headers["content-disposition"];
+        if (disposition && disposition.indexOf("attachment") !== -1) {
+          const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/;
+          const matches = filenameRegex.exec(disposition);
+          if (matches != null && matches[1]) {
+            filename = matches[1].replace(/['"]/g, "");
+          }
+        }
+
+        link.setAttribute("download", filename);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        toast.success("Invoice downloaded successfully");
+        return;
       }
 
-      // Fallback direct browser download
-      const baseUrl = process.env.NEXT_PUBLIC_API_BASE_URL || "/api/v1";
-      window.open(`${baseUrl}/invoices/${encodeURIComponent(orderNo)}/download?view=CUSTOMER`, "_blank");
-      toast.success("Downloading invoice...");
+      toast.error("Invalid invoice response from server");
     } catch (e: any) {
       console.error(e);
       toast.error(e.message || "Failed to download invoice from server");

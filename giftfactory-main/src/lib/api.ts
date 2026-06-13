@@ -1532,9 +1532,11 @@ export async function validateCoupon(code: string): Promise<ApiResponse<ApiCoupo
   return data;
 }
 
-export async function downloadInvoice(invoiceNumber: string): Promise<ApiResponse<any>> {
-  const { data } = await get(API_ENDPOINTS.invoices.download(invoiceNumber));
-  return data;
+export async function downloadInvoice(invoiceNumber: string): Promise<any> {
+  const response = await axiosInstance.get(API_ENDPOINTS.invoices.download(invoiceNumber), {
+    responseType: "blob",
+  });
+  return response;
 }
 
 export async function viewInvoice(invoiceNumber: string): Promise<ApiResponse<any>> {
